@@ -1,7 +1,10 @@
 import sys
+import datetime
+import re
 
 from django.db import models
 from django.db.models import ForeignKey, OneToOneField, ManyToManyField
+from django.utils import six
 # try:
 #    from django.db.models.related import RelatedObject
 # except:
@@ -141,3 +144,39 @@ def get_user_model():
     except ImportError:
         from django.contrib.auth.models import User
     return User
+
+def parse(string):
+    """
+    Parse a string into a timedelta object.
+
+    """
+    string = string.strip()
+
+    if string == "":
+        raise TypeError("'%s' is not a valid time interval" % string)
+    # This is the format we get from sometimes Postgres, sqlite,
+    # and from serialization
+    d = re.match(
+        r'^((?P<days>[-+]?\d+) days?,? )?(?P<sign>[-+]?)(?P<hours>\d+):'
+        r'(?P<minutes>\d+)(:(?P<seconds>\d+(\.\d+)?))?$',
+        six.text_type(string))
+    if d:
+        d = d.groupdict(0)
+        if d['sign'] == '-':
+            for k in 'hours', 'minutes', 'seconds':
+                d[k] = '-' + d[k]
+        d.pop('sign', None)
+    else:
+        # This is the more flexible format
+        d = re.match(
+            r'^((?P<weeks>-?((\d*\.\d+)|\d+))\W*w((ee)?(k(s)?)?)(,)?\W*)?'
+            r'((?P<days>-?((\d*\.\d+)|\d+))\W*d(ay(s)?)?(,)?\W*)?'
+            r'((?P<hours>-?((\d*\.\d+)|\d+))\W*h(ou)?(r(s)?)?(,)?\W*)?'
+            r'((?P<minutes>-?((\d*\.\d+)|\d+))\W*m(in(ute)?(s)?)?(,)?\W*)?'
+            r'((?P<seconds>-?((\d*\.\d+)|\d+))\W*s(ec(ond)?(s)?)?)?\W*$',
+            six.text_type(string))
+        if not d:
+            raise TypeError("'%s' is not a valid time interval" % string)
+        d = d.groupdict(0)
+
+    return datetime.timedelta(**dict(((k, float(v)) for k, v in d.items())))
